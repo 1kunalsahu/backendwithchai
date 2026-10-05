@@ -55,7 +55,7 @@ const RegisterUser=asyncHandler(async(req,res)=>{
        throw new ApiError(409,"User already existed")
     }
     
-    console.log("FILES:", req.files);
+    // console.log("FILES:", req.files);
 const avatarLocalPath = req.files?.avatar[0]?.path;
    const coverImageLocalPath = req.files?.coverImage?.[0]?.path;
 
@@ -211,10 +211,7 @@ const refreshAccessToken=asyncHandler(async(req,res)=>{
         .cookie("refreshToken", refreshToken, options)
         .json(
             new ApiResponse(
-                200, 
-                {
-                    user: loggedInUser, accessToken, refreshToken
-                },
+                200,
                 "User logged In Successfully"
             )
         )
@@ -225,6 +222,118 @@ const refreshAccessToken=asyncHandler(async(req,res)=>{
 
 })
 
+const changeCurrentPassword=asyncHandler(async(req,res)=>{
+    //use middleware and check token verification
+    // take old and new password from frontend
+    //match old password with db password 
+    //update password field using mongodb method
+    //bycrpt password
+    const {oldPassword , newPassword, confirmPassword}=req.body
+    if(!oldPassword || !newPassword || !confirmPassword) {
+        return res.status(400,"enter both oldPassword and new password and confirm")
+    }
+
+    if(newPassword !== confirmPassword){
+        throw new ApiError(400,"new and confirm pass not matched")
+    }
+    const user=await User.findById(req.user?._id).select("+password");
+
+    const isPasswordValid=await user.isPasswordCorrect(oldPassword);
+
+    if(!isPasswordValid){
+        throw new ApiError(400,"enter valid old password")
+    }
+
+    user.password=newPassword
+
+   await user.save({validateBeforeSave:false})
+
+   return res
+   .status(200)
+   .json(new ApiResponse(200,"password changed"))
+
+})
+
+const getCurrentUser = asyncHandler(async(req,res)=>{
+   return res.status(200).json({
+        user:req.user,
+        message:"current user details"
+    }
+    )
+})
 
 
-export {RegisterUser,loginUser,logoutUser,refreshAccessToken};
+const updateUserAvatar=asyncHandler(async(req,res)=>{
+  
+
+    const avatarLocalPath = req.file?.path
+
+    if(!avatarLocalPath){
+        throw new ApiError(403,"avatar is empty")
+    }
+    const avatar = await uploadOnCloudinary(avatarLocalPath)
+
+    if(!avatar){
+        throw new ApiError(400,"problem while upload to cloudinary")
+    }
+
+   const user= await User.findByIdAndUpdate(
+        req.user._id,
+        {
+            $set:{
+                avatar:avatar.url
+            }
+        },
+        {new:true}
+
+    )
+
+     return res.status(200).json({
+    user,
+    message: "Avatar updated successfully"
+  });
+
+})
+
+const updateCoverImage=asyncHandler(async(req,res)=>{
+  
+
+    const coverImageLocalPath = req.file?.path
+
+    if(!coverImageLocalPath){
+        throw new ApiError(403,"avatar is empty")
+    }
+    const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+
+    if(!coverImage){
+        throw new ApiError(400,"problem while uploading coverimage to cloudinary")
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.user._id,
+        {
+            $set:{
+                coverImage:coverImage.url
+            }
+        },
+        {new:true}
+
+    )
+
+     return res.status(200).json({
+    user,
+    message: "Avatar updated successfully"
+  });
+
+
+})
+
+
+export {RegisterUser,
+    loginUser,
+    logoutUser,
+    refreshAccessToken
+    ,changeCurrentPassword
+    ,getCurrentUser
+    ,updateUserAvatar,
+updateCoverImage};
