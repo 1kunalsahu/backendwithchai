@@ -302,7 +302,7 @@ const updateCoverImage=asyncHandler(async(req,res)=>{
     const coverImageLocalPath = req.file?.path
 
     if(!coverImageLocalPath){
-        throw new ApiError(403,"avatar is empty")
+        throw new ApiError(403,"coverimage is empty")
     }
     const coverImage = await uploadOnCloudinary(coverImageLocalPath);
 

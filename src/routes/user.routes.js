@@ -56,7 +56,9 @@ updateCoverImage
 )
 
 // taking data from params
+
 router.route("/c/:username").get(verifyJWT,getUserChannelProfile)
+
 router.route("/history").get(verifyJWT,getWatchHistory)
 
 
