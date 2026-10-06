@@ -4,7 +4,9 @@ import { RegisterUser,loginUser,refreshAccessToken,
     getCurrentUser,
     changeCurrentPassword,
     updateCoverImage,
-    updateUserAvatar
+    updateUserAvatar,
+    getUserChannelProfile,
+getWatchHistory
 
  } from "../controllers/user.controller.js";
 import { upload } from "../middleware/multer.middleware.js";
@@ -41,16 +43,21 @@ router.route("/refresh-token").post(refreshAccessToken)
 
 router.route("/currentUser").get(verifyJWT,getCurrentUser)
 router.route("/change/Password").post(verifyJWT,changeCurrentPassword)
-router.route("/change/avatar").post(upload.single(
+router.route("/change-avatar").patch(verifyJWT,
+    upload.single(
 "avatar"),
-verifyJWT,
+
 updateUserAvatar
 )
-router.route("/change/coverImage").post(upload.single(
+router.route("/cover-Image").patch(verifyJWT,
+    upload.single(
 "coverImage"),
-verifyJWT,
 updateCoverImage
 )
+
+// taking data from params
+router.route("/c/:username").get(verifyJWT,getUserChannelProfile)
+router.route("/history").get(verifyJWT,getWatchHistory)
 
 
 export default router
