@@ -1,59 +1,235 @@
-import { ApiError } from "../utils/ApiError.js";
-import { asyncHandler } from "../utils/asyncHandler.js";
-import { ApiResponse } from "../utils/ApiResponse.js";
+import mongoose, {isValidObjectId} from "mongoose"
 import {Video} from "../models/video.model.js"
-import { User } from "../models/user.model.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import {User} from "../models/user.model.js"
+import {ApiError} from "../utils/ApiError.js"
+import {ApiResponse} from "../utils/ApiResponse.js"
+import {asyncHandler} from "../utils/asyncHandler.js"
+import {uploadOnCloudinary} from "../utils/cloudinary.js"
 
-const getAllVideos = asyncHandler(async(req,res)=>{
-    const {page =1,limit=10,query,sortBy,sortType,userId}=req.query
 
-    
+const getAllVideos = asyncHandler(async (req, res) => {
+    const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query
+    const pageNumber = Number(page)
+    const limitNumber = Number(limit)
 
+    if(!Number.isInteger(pageNumber) || pageNumber < 1){
+        throw new ApiError(400,"page must be a positive number")
+    }
+    if(!Number.isInteger(limitNumber) || limitNumber < 1 || limitNumber > 100){
+        throw new ApiError(400,"limit must be between 1 and 100")
+    }
+
+    const filter = {
+        isPublished:true
+    }
+
+    if(query?.trim()){
+        filter.$or=[
+            {title:{$regex:query.trim(),$options:"i"}},
+            {description:{$regex:query.trim(),$options:"i"}}
+        ]
+    }
+
+    if(userId){
+        if(!isValidObjectId(userId)){
+            throw new ApiError(400,"invalid user id")
+        }
+        filter.owner=userId
+    }
+
+    const allowedSortFields=["createdAt","views","title"]
+    const sortField=allowedSortFields.includes(sortBy) ? sortBy : "createdAt"
+    const sortOrder=sortType === "asc" ? 1 : -1
+    const skip=(pageNumber-1)*limitNumber
+
+    const [videos,totalVideos]=await Promise.all([
+        Video.find(filter)
+        .populate("owner","username fullName avatar")
+        .sort({[sortField]:sortOrder})
+        .skip(skip)
+        .limit(limitNumber),
+        Video.countDocuments(filter)
+    ])
+
+    return res.status(200).json(
+        new ApiResponse(200,{
+            videos,
+            page:pageNumber,
+            limit:limitNumber,
+            totalVideos,
+            totalPages:Math.ceil(totalVideos/limitNumber)
+        },"videos fetched successfully")
+    )
 })
 
-const publishVideoById = asyncHandler(async(req,res)=>{
-    const {title,description} = req.body
-
-    if(!title || !description){
-        throw new ApiError(400,"title aur description to daal lo");
+const publishAVideo = asyncHandler(async (req, res) => {
+    const { title, description} = req.body
+    if(!title?.trim() || !description?.trim()){
+        throw new ApiError(400,"title and description are required")
     }
+
     const isExist=await Video.findOne({
-            owner:req.user._id,
-            title:title
-        })
-
-    if(isExist){
-        throw new ApiError(400,"this name vdo is already there");
-    }
-    const VideolocalPath = req.files?.video[0]?.path
-    const thumbnailLocalPath=req.files?.thumbnail[0]?.path
-
-    if(!VideolocalPath) {
-        throw new ApiError(403,"video file is missing")
-    }
-    if(!thumbnailLocalPath) {
-        throw new ApiError(403,"thumbnail file is missing")
-    }
-   const vdo=await uploadOnCloudinary(VideolocalPath);
-    const thumbnail=await uploadOnCloudinary(thumbnailLocalPath);
-
-    if(!vdo || !thumbnail){
-        throw new ApiError(400,"something wrong while uploding vdo/thumbnail to cloudinary");
-    }
-
-    const video = await Video.create({
-           videoFile:vdo?.url,
-           thumbnail:thumbnail?.url,
-            title,
-            description
+        owner:req.user._id,
+        title:title.trim()
     })
 
-    return res
-    .status(200)
-    .json(
-        new ApiResponse(200,video,"video published successfully")
+    if(isExist){
+        throw new ApiError(400,"this name vdo is already there")
+    }
+
+    const videoLocalPath=req.files?.videoFile?.[0]?.path
+    const thumbnailLocalPath=req.files?.thumbnail?.[0]?.path
+
+    if(!videoLocalPath){
+        throw new ApiError(400,"video file is required")
+    }
+    if(!thumbnailLocalPath){
+        throw new ApiError(400,"thumbnail file is required")
+    }
+
+    const videoFile=await uploadOnCloudinary(videoLocalPath)
+    const thumbnail=await uploadOnCloudinary(thumbnailLocalPath)
+
+    if(!videoFile || !thumbnail){
+        throw new ApiError(400,"something wrong while uploading video or thumbnail")
+    }
+
+    const video=await Video.create({
+        videoFile:videoFile.url,
+        thumbnail:thumbnail.url,
+        title:title.trim(),
+        description:description.trim(),
+        duration:videoFile.duration || 0,
+        owner:req.user._id
+    })
+
+    if(!video){
+        throw new ApiError(500,"something wrong while publishing video")
+    }
+
+    return res.status(201).json(
+        new ApiResponse(201,video,"video published successfully")
     )
-    
+})
+
+const getVideoById = asyncHandler(async (req, res) => {
+    const { videoId } = req.params
+    if(!isValidObjectId(videoId)){
+        throw new ApiError(400,"invalid video id")
+    }
+
+    const video=await Video.findByIdAndUpdate(
+        videoId,
+        {
+            $inc:{views:1}
+        },
+        {new:true}
+    ).populate("owner","username fullName avatar")
+
+    if(!video){
+        throw new ApiError(404,"video not found")
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200,video,"video fetched successfully")
+    )
+})
+
+const updateVideo = asyncHandler(async (req, res) => {
+    const { videoId } = req.params
+    const {title,description}=req.body
+
+    if(!isValidObjectId(videoId)){
+        throw new ApiError(400,"invalid video id")
+    }
+    if(!title?.trim() && !description?.trim() && !req.file?.path){
+        throw new ApiError(400,"title, description or thumbnail is required")
+    }
+
+    const updateData={}
+    if(title?.trim()) updateData.title=title.trim()
+    if(description?.trim()) updateData.description=description.trim()
+
+    if(req.file?.path){
+        const thumbnail=await uploadOnCloudinary(req.file.path)
+        if(!thumbnail){
+            throw new ApiError(400,"problem while uploading thumbnail")
+        }
+        updateData.thumbnail=thumbnail.url
+    }
+
+    const video=await Video.findOneAndUpdate(
+        {
+            _id:videoId,
+            owner:req.user._id
+        },
+        {
+            $set:updateData
+        },
+        {
+            new:true,
+            runValidators:true
+        }
+    ).populate("owner","username fullName avatar")
+
+    if(!video){
+        throw new ApiError(404,"video not found or you are not the owner")
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200,video,"video updated successfully")
+    )
 
 })
+
+const deleteVideo = asyncHandler(async (req, res) => {
+    const { videoId } = req.params
+    if(!isValidObjectId(videoId)){
+        throw new ApiError(400,"invalid video id")
+    }
+
+    const video=await Video.findOneAndDelete({
+        _id:videoId,
+        owner:req.user._id
+    })
+
+    if(!video){
+        throw new ApiError(404,"video not found or you are not the owner")
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200,video,"video deleted successfully")
+    )
+})
+
+const togglePublishStatus = asyncHandler(async (req, res) => {
+    const { videoId } = req.params
+    if(!isValidObjectId(videoId)){
+        throw new ApiError(400,"invalid video id")
+    }
+
+    const video=await Video.findOne({
+        _id:videoId,
+        owner:req.user._id
+    })
+
+    if(!video){
+        throw new ApiError(404,"video not found or you are not the owner")
+    }
+
+    video.isPublished=!video.isPublished
+    await video.save({validateBeforeSave:false})
+
+    return res.status(200).json(
+        new ApiResponse(200,video,"video publish status changed successfully")
+    )
+})
+
+export {
+    getAllVideos,
+    publishAVideo,
+    getVideoById,
+    updateVideo,
+    deleteVideo,
+    togglePublishStatus
+}
