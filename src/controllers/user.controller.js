@@ -57,7 +57,7 @@ const RegisterUser=asyncHandler(async(req,res)=>{
     }
     
     // console.log("FILES:", req.files);
-const avatarLocalPath = req.files?.avatar[0]?.path;
+const avatarLocalPath = req.files?.avatar?.[0]?.path;
 //    const coverImageLocalPath = req.files?.coverImage?.[0]?.path;
 
    let coverImageLocalPath;
@@ -138,7 +138,7 @@ const loginUser=asyncHandler( async (req,res)=>{
     
     const options = {
         httpOnly: true,
-        secure: true
+        secure: process.env.NODE_ENV === "production"
     }
     
     return res
@@ -171,7 +171,7 @@ const logoutUser = asyncHandler(async(req,res)=>{
 
     const options = {
         httpOnly: true,
-        secure: true
+        secure: process.env.NODE_ENV === "production"
     }
 
      return res
@@ -184,15 +184,15 @@ const logoutUser = asyncHandler(async(req,res)=>{
 })
 
 const refreshAccessToken=asyncHandler(async(req,res)=>{
-    const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
+    const incomingRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken
 
     if(!incomingRefreshToken){
         throw new ApiError(401,"Unauthorized request")
     }
 
     try {
-        const decodedToken=jwt.verify(incomingRefreshToken,process.env.ACCESS_TOKEN_SECRET);
-            const user = await User.findById(decodedToken?._id)
+        const decodedToken=jwt.verify(incomingRefreshToken,process.env.REFRESH_TOKEN_SECRET);
+            const user = await User.findById(decodedToken?._id).select("+refreshToken")
     
             if(!user) {
                 throw new ApiError(401,"invalid refresh token");
@@ -205,7 +205,7 @@ const refreshAccessToken=asyncHandler(async(req,res)=>{
     
             const options ={
                 httpOnly:true,
-                secure:true
+                secure: process.env.NODE_ENV === "production"
             }
     
             const {accessToken,refreshToken}=await generateAccessAndRefereshTokens(user._id)
@@ -358,22 +358,22 @@ const getUserChannelProfile=asyncHandler(async(req,res)=>{
            $lookup:{
             from:"subscriptions",
             localField:"_id",
-            foreignField:"subcriber",
+                foreignField:"subscriber",
             as:"subscribedTo"
            } 
         },
         {
             $addFields:{
-                subscibersCount:{
-                    $size: "$subsribers"
+                subscribersCount:{
+                    $size: "$subscribers"
                 },
                 
                     subscribedToCount:{
-                        $size : "$subcribedTo"
+                        $size : "$subscribedTo"
                     },
-                isSubsribed:{
+                isSubscribed:{
                     $cond:{
-                        if:{$in:[req.user?._id,"$subscribers.subsriber"]},
+                        if:{$in:[new mongoose.Types.ObjectId(req.user?._id),"$subscribers.subscriber"]},
                         then: true,
                         else:false
                     }
@@ -385,9 +385,9 @@ const getUserChannelProfile=asyncHandler(async(req,res)=>{
             $project:{
                 fullName: 1,
                 username:1,
-                subscibersCount:1,
-                subscibersCount:1,
-                isSubsribed:1,
+                subscribersCount:1,
+                subscribedToCount:1,
+                isSubscribed:1,
                 avatar:1,
                 coverImage:1
 
