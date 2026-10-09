@@ -45,6 +45,12 @@ app.use("/api/v1/dashboard", dashboardRouter)
 app.use((error, req, res, next) => {
     if (res.headersSent) return next(error)
 
+    if (error?.name === "MulterError") {
+        return res.status(400).json(
+            new ApiResponse(400, null, error.message || "Invalid file upload")
+        )
+    }
+
     const statusCode = error.statusCode || 500
     return res.status(statusCode).json(
         new ApiResponse(statusCode, null, error.message || "Internal server error")

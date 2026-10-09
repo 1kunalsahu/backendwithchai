@@ -14,27 +14,40 @@ dotenv.config();
         api_secret:process.env.CLOUDINARY_API_SECRET // Click 'View API Keys' above to copy your API secret
     });
 
-const uploadOnCloudinary = async (localFilePath) => {
+const uploadOnCloudinary = async (localFilePath, resourceType = "auto") => {
     try {
         if (!localFilePath) return null;
 
         const response = await cloudinary.uploader.upload(localFilePath, {
-            resource_type: "auto"
+            resource_type: resourceType
         });
 
         console.log("File uploaded on Cloudinary:", response.url);
 
-        if (fs.existsSync(localFilePath)) {
-            fs.unlinkSync(localFilePath);
+        try {
+            if (fs.existsSync(localFilePath)) {
+                fs.unlinkSync(localFilePath);
+            }
+        } catch (cleanupError) {
+            console.error("Uploaded file cleanup error:", cleanupError.message);
         }
 
         return response;
 
     } catch (error) {
-        console.log("Cloudinary upload error:", error);
+        console.error("Cloudinary upload error:", {
+            message: error?.message,
+            name: error?.name,
+            httpCode: error?.http_code,
+            resourceType,
+        });
 
-        if (localFilePath && fs.existsSync(localFilePath)) {
-            fs.unlinkSync(localFilePath);
+        try {
+            if (localFilePath && fs.existsSync(localFilePath)) {
+                fs.unlinkSync(localFilePath);
+            }
+        } catch (cleanupError) {
+            console.error("Failed to remove local upload after Cloudinary error:", cleanupError.message);
         }
 
         return null;

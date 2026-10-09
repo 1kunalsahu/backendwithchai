@@ -62,6 +62,9 @@ const getAllVideos = asyncHandler(async (req, res) => {
     )
 })
 
+const isMimeType = (file, type) => file?.mimetype?.startsWith(`${type}/`)
+
+
 const publishAVideo = asyncHandler(async (req, res) => {
     const { title, description} = req.body
     if(!title?.trim() || !description?.trim()){
@@ -77,8 +80,10 @@ const publishAVideo = asyncHandler(async (req, res) => {
         throw new ApiError(400,"this name vdo is already there")
     }
 
-    const videoLocalPath=req.files?.videoFile?.[0]?.path
-    const thumbnailLocalPath=req.files?.thumbnail?.[0]?.path
+    const uploadedVideoFile = req.files?.videoFile?.[0]
+    const thumbnailFile = req.files?.thumbnail?.[0]
+    const videoLocalPath=uploadedVideoFile?.path
+    const thumbnailLocalPath=thumbnailFile?.path
 
     if(!videoLocalPath){
         throw new ApiError(400,"video file is required")
@@ -86,20 +91,26 @@ const publishAVideo = asyncHandler(async (req, res) => {
     if(!thumbnailLocalPath){
         throw new ApiError(400,"thumbnail file is required")
     }
+    if(!isMimeType(uploadedVideoFile, "video")){
+        throw new ApiError(400,"videoFile must be a video file")
+    }
+    if(!isMimeType(thumbnailFile, "image")){
+        throw new ApiError(400,"thumbnail must be an image file")
+    }
 
-    const videoFile=await uploadOnCloudinary(videoLocalPath)
-    const thumbnail=await uploadOnCloudinary(thumbnailLocalPath)
+    const videoFile=await uploadOnCloudinary(videoLocalPath, "video")
+    const thumbnail=await uploadOnCloudinary(thumbnailLocalPath, "image")
 
     if(!videoFile || !thumbnail){
         throw new ApiError(400,"something wrong while uploading video or thumbnail")
     }
 
     const video=await Video.create({
-        videoFile:videoFile.url,
-        thumbnail:thumbnail.url,
+        videoFile:videoFile?.url,
+        thumbnail:thumbnail?.url,
         title:title.trim(),
         description:description.trim(),
-        duration:videoFile.duration || 0,
+        duration:videoFile?.duration || 0,
         owner:req.user._id
     })
 
@@ -145,13 +156,16 @@ const updateVideo = asyncHandler(async (req, res) => {
     if(!title?.trim() && !description?.trim() && !req.file?.path){
         throw new ApiError(400,"title, description or thumbnail is required")
     }
+    if(req.file && !isMimeType(req.file, "image")){
+        throw new ApiError(400,"thumbnail must be an image file")
+    }
 
     const updateData={}
     if(title?.trim()) updateData.title=title.trim()
     if(description?.trim()) updateData.description=description.trim()
 
     if(req.file?.path){
-        const thumbnail=await uploadOnCloudinary(req.file.path)
+        const thumbnail=await uploadOnCloudinary(req.file.path, "image")
         if(!thumbnail){
             throw new ApiError(400,"problem while uploading thumbnail")
         }
