@@ -99,10 +99,13 @@ const publishAVideo = asyncHandler(async (req, res) => {
     }
 
     const videoFile=await uploadOnCloudinary(videoLocalPath, "video")
-    const thumbnail=await uploadOnCloudinary(thumbnailLocalPath, "image")
+    if(!videoFile){
+        throw new ApiError(400,"video upload failed; use a smaller video or a supported video format")
+    }
 
-    if(!videoFile || !thumbnail){
-        throw new ApiError(400,"something wrong while uploading video or thumbnail")
+    const thumbnail=await uploadOnCloudinary(thumbnailLocalPath, "image")
+    if(!thumbnail){
+        throw new ApiError(400,"thumbnail upload failed; use a supported image format")
     }
 
     const video=await Video.create({
@@ -129,17 +132,27 @@ const getVideoById = asyncHandler(async (req, res) => {
         throw new ApiError(400,"invalid video id")
     }
 
-    const video=await Video.findByIdAndUpdate(
-        videoId,
+    let video=await Video.findOneAndUpdate(
+        {_id: videoId, viewedBy: {$ne: req.user._id}},
         {
-            $inc:{views:1}
+            $inc:{views:1},
+            $addToSet:{viewedBy: req.user._id}
         },
-        {new:true}
+        {returnDocument: "after"}
     ).populate("owner","username fullName avatar")
+
+    if (!video) {
+        video = await Video.findById(videoId).populate("owner","username fullName avatar")
+    }
 
     if(!video){
         throw new ApiError(404,"video not found")
     }
+
+    await User.updateOne(
+        {_id: req.user._id},
+        {$addToSet: {watchHistory: video._id}}
+    )
 
     return res.status(200).json(
         new ApiResponse(200,video,"video fetched successfully")
@@ -181,7 +194,7 @@ const updateVideo = asyncHandler(async (req, res) => {
             $set:updateData
         },
         {
-            new:true,
+            returnDocument: "after",
             runValidators:true
         }
     ).populate("owner","username fullName avatar")

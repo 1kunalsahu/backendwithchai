@@ -54,7 +54,7 @@ const updateComment = asyncHandler(async (req, res) => {
     const comment = await Comment.findOneAndUpdate(
         {_id: commentId, owner: req.user._id},
         {$set: {content}},
-        {new: true, runValidators: true}
+        {returnDocument: "after", runValidators: true}
     ).populate("owner", "username fullName avatar")
     if (!comment) throw new ApiError(404, "Comment not found or you are not the owner")
     return res.status(200).json(new ApiResponse(200, comment, "Comment updated successfully"))

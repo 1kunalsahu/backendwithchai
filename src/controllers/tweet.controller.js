@@ -27,7 +27,7 @@ const updateTweet = asyncHandler(async (req, res) => {
     const content = req.body?.content?.trim()
     if (!isValidObjectId(tweetId)) throw new ApiError(400, "Invalid tweet id")
     if (!content) throw new ApiError(400, "Tweet content is required")
-    const tweet = await Tweet.findOneAndUpdate({_id: tweetId, owner: req.user._id}, {$set: {content}}, {new: true, runValidators: true})
+    const tweet = await Tweet.findOneAndUpdate({_id: tweetId, owner: req.user._id}, {$set: {content}}, {returnDocument: "after", runValidators: true})
         .populate("owner", "username fullName avatar")
     if (!tweet) throw new ApiError(404, "Tweet not found or you are not the owner")
     return res.status(200).json(new ApiResponse(200, tweet, "Tweet updated successfully"))

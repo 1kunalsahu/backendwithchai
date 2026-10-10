@@ -48,7 +48,10 @@ describe("healthcheck and authentication", () => {
     })
 
     test("rejects invalid registration and invalid login", async () => {
-        expect((await request(app).post("/api/v1/users/register").send({})).status).toBe(400)
+        const invalidRegistration = await request(app).post("/api/v1/users/register").send({})
+        expect(invalidRegistration.status).toBe(400)
+        expect(invalidRegistration.body.message).toBe("Please correct the highlighted fields")
+        expect(invalidRegistration.body.errors.some((error) => error.path === "username" && error.msg === "Username is required")).toBe(true)
         expect((await request(app).post("/api/v1/users/login").send({
             email: "missing@example.com", password: "wrong"
         })).status).toBe(403)
@@ -205,7 +208,7 @@ describe("video APIs", () => {
         expect(await Video.countDocuments({owner: user._id})).toBe(0)
     })
 
-    test("lists, searches, paginates, gets, and increments video views", async () => {
+    test("lists, searches, paginates, counts one view per user, and records watch history", async () => {
         await createTestVideo(user, {title: "Alpha video", views: 5})
         await createTestVideo(user, {title: "Beta video", views: 10})
         const list = await agent.get("/api/v1/videos?page=1&limit=1&sortBy=views&sortType=desc")
@@ -217,6 +220,9 @@ describe("video APIs", () => {
         expect((await agent.get("/api/v1/videos?query=Alpha")).body.data.videos).toHaveLength(1)
         const video = await Video.findOne({title: "Alpha video"})
         expect((await agent.get(`/api/v1/videos/${video._id}`)).body.data.views).toBe(6)
+        expect((await agent.get(`/api/v1/videos/${video._id}`)).body.data.views).toBe(6)
+        const history = await agent.get("/api/v1/users/history")
+        expect(history.body.data.map((item) => String(item._id))).toContain(String(video._id))
     })
 
     test("updates, toggles publish status, and deletes only owned videos", async () => {

@@ -1,8 +1,10 @@
+import dotenv from "dotenv"
 import express from "express"
 import cors from "cors"
 import cookieParser from "cookie-parser";
 import {ApiResponse} from "./utils/ApiResponse.js"
 
+dotenv.config({path: "./.env"})
 
 const app=express();
 
@@ -46,15 +48,18 @@ app.use((error, req, res, next) => {
     if (res.headersSent) return next(error)
 
     if (error?.name === "MulterError") {
-        return res.status(400).json(
-            new ApiResponse(400, null, error.message || "Invalid file upload")
-        )
+        const response = new ApiResponse(400, null, error.message || "Invalid file upload")
+        response.errors = error.field ? [{field: error.field, msg: error.message}] : []
+        return res.status(400).json(response)
     }
 
-    const statusCode = error.statusCode || 500
-    return res.status(statusCode).json(
-        new ApiResponse(statusCode, null, error.message || "Internal server error")
-    )
+    const statusCode = error.statusCode || (error?.name === "ValidationError" ? 400 : 500)
+    const validationErrors = error?.name === "ValidationError"
+        ? Object.entries(error.errors || {}).map(([field, detail]) => ({field, msg: detail.message}))
+        : (error.errors || [])
+    const response = new ApiResponse(statusCode, null, error.message || "Internal server error")
+    if (validationErrors.length) response.errors = validationErrors
+    return res.status(statusCode).json(response)
 })
 
 

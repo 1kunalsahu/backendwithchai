@@ -4,6 +4,8 @@ import fs from 'fs';
 import dotenv from "dotenv";
 dotenv.config();
 
+const LARGE_VIDEO_THRESHOLD = 90 * 1024 * 1024;
+const VIDEO_CHUNK_SIZE = 20 * 1024 * 1024;
 
 // console.log("CLOUD NAME:", process.env.CLOUDINARY_CLOUD_NAME);
 // console.log("API KEY:", process.env.CLOUDINARY_API_KEY);
@@ -18,9 +20,16 @@ const uploadOnCloudinary = async (localFilePath, resourceType = "auto") => {
     try {
         if (!localFilePath) return null;
 
-        const response = await cloudinary.uploader.upload(localFilePath, {
-            resource_type: resourceType
-        });
+        const isLargeVideo = resourceType === "video" &&
+            fs.statSync(localFilePath).size >= LARGE_VIDEO_THRESHOLD;
+        const response = isLargeVideo
+            ? await cloudinary.uploader.upload_large(localFilePath, {
+                resource_type: "video",
+                chunk_size: VIDEO_CHUNK_SIZE
+            })
+            : await cloudinary.uploader.upload(localFilePath, {
+                resource_type: resourceType
+            });
 
         console.log("File uploaded on Cloudinary:", response.url);
 
@@ -38,7 +47,7 @@ const uploadOnCloudinary = async (localFilePath, resourceType = "auto") => {
         console.error("Cloudinary upload error:", {
             message: error?.message,
             name: error?.name,
-            httpCode: error?.http_code,
+            httpCode: error?.http_code || error?.statusCode || error?.status,
             resourceType,
         });
 

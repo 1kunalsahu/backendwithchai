@@ -165,7 +165,7 @@ const logoutUser = asyncHandler(async(req,res)=>{
             }
         },
         {
-            new: true
+            returnDocument: "after"
         }
     )
 
@@ -289,7 +289,7 @@ const updateUserAvatar=asyncHandler(async(req,res)=>{
                 avatar:avatar.url
             }
         },
-        {new:true}
+        {returnDocument: "after"}
 
     )
 
@@ -321,7 +321,7 @@ const updateCoverImage=asyncHandler(async(req,res)=>{
                 coverImage:coverImage.url
             }
         },
-        {new:true}
+        {returnDocument: "after"}
 
     )
 

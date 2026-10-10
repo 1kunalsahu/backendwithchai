@@ -16,7 +16,12 @@ const registerValidator = [
     body("username")
         .trim()
         .notEmpty()
-        .withMessage("Username is required"),
+        .withMessage("Username is required")
+        .bail()
+        .isLength({ min: 3, max: 30 })
+        .withMessage("Username must be between 3 and 30 characters")
+        .matches(/^[a-zA-Z0-9]+$/)
+        .withMessage("Username can contain only letters and numbers"),
 
     body("password")
         .notEmpty()
